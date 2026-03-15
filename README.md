@@ -46,6 +46,10 @@ Telegram Message
 ## 📱 Telegram Preview
 
 ![N8N Telegram](N8N%20Telegram.jpg)
+
+## 📸 Snowflake Screenshot
+
+![Snowflake Query](Snowflake%20Query.jpg)
 ---
 
 ## ✨ Features
