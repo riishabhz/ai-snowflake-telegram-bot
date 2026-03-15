@@ -39,7 +39,13 @@ Telegram Message
       ↓
   Telegram Response (Results + Explanation)
 ```
-N8N Snowflake Workflow.jpg
+## 📸 Workflow Screenshot
+
+![N8N Snowflake Workflow](N8N%20Snowflake%20Workflow.jpg)
+
+## 📱 Telegram Preview
+
+![N8N Telegram](N8N%20Telegram.jpg)
 ---
 
 ## ✨ Features
