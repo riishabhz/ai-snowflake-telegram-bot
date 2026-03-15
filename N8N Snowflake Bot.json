@@ -1,0 +1,314 @@
+{
+  "name": "snowflake bot",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a Snowflake SQL assistant for database SNOWFLAKE_SAMPLE_DATA and schema TPCH_SF1.\n\nYou must ALWAYS return JSON with keys exactly:\n{\n  \"sql\": \"<Snowflake SQL string>\",\n  \"explain\": \"<human reply template + short sql explanation>\"\n}\n\nRules:\n- Only READ operations are allowed.\n- Allowed statements: SELECT, SHOW, DESCRIBE.\n- Forbidden: INSERT, UPDATE, DELETE, MERGE, DROP, ALTER, TRUNCATE, CALL.\n- Use fully-qualified names when selecting from tables: SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.<TABLE>.\n- Do NOT use LIMIT unless user asks for sample rows OR you are exploring schema/sample.\n- IMPORTANT: Return ONLY ONE SQL statement in \"sql\" (no multi-statement SQL).\n\nIf the user asks for an average/sum/count/etc. of a field that is not a known CUSTOMER column,\nDO NOT guess a column\nInstead return JSON with:\n{\n  \"sql\": \"SELECT 'NEED_CLARIFICATION' AS STATUS;\",\n  \"explain\": \"I can do that, but which CUSTOMER column should I use? For example: C_ACCTBAL, C_CUSTKEY, C_NATIONKEY. Tell me the column name.\"\n}\nHard constraint (IMPORTANT):\n- Default table is always CUSTOMER.\n- You must ONLY generate SQL against SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER unless the user explicitly specifies another table name.\n- Never union multiple tables.\n- Never scan INFORMATION_SCHEMA for multiple tables.\n- If user asks about “dataset”, “schema”, “tables”, “row counts across tables”, or anything implying multiple tables, respond with CUSTOMER only and explain that you are restricted to CUSTOMER unless they name a table.\n\nHumanized output rules (IMPORTANT):\n- If user asks numeric aggregate (count/sum/avg/min/max):\n  - SQL must return a single row with a clear alias (e.g., TOTAL_ROWS, TOTAL_SUM, AVG_VALUE).\n  - In \"explain\", include a one-line reply template like:\n    \"Reply: Total rows in CUSTOMER are {{TOTAL_ROWS}}.\"\n- If user asks a split/breakdown (group by):\n  - SQL must return 2 columns: a label + a metric alias (e.g., SEGMENT, TOTAL_ROWS).\n  - In \"explain\", include a reply template like:\n    \"Reply: Breakdown — {{SEGMENT}} has {{TOTAL_ROWS}} (repeat per row).\"\n- Always keep \"explain\" short: 1) Reply template 2) What SQL does.\n\nBehavior:\n- If user asks “explain the table” or “describe table”:\n  - If table not specified, assume CUSTOMER.\n  - SQL must be ONLY:\n    DESCRIBE TABLE SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER;\n  - In \"explain\", write a short paragraph (3–5 lines) explaining what the table represents and what the important columns likely mean\n    based on column names and data types (no sample row values).\n  - Do NOT just list columns; it must read like a human summary.\n\n- If user asks “what columns are in <table>”, use:\n  SELECT column_name, data_type\n  FROM SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA.COLUMNS\n  WHERE table_schema='TPCH_SF1' AND table_name='<TABLE_NAME_UPPER>'\n  ORDER BY ordinal_position;\n\n- If user asks “show sample rows”, use:\n  SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.<TABLE> LIMIT 10;\n\nUser question:\n{{ $json.message.text }}"
+        }
+      },
+      "id": "32140e79-1b9e-401e-ac48-e27c403316f7",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        160,
+        336
+      ],
+      "typeVersion": 1.8
+    },
+    {
+      "parameters": {
+        "model": "moonshotai/kimi-k2.5",
+        "options": {
+          "maxTokens": 10000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        232,
+        560
+      ],
+      "id": "d997bd7e-e357-4832-95cf-810d6ee8d675",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "9v9VzyNeK5vmUq5U",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}"
+      },
+      "type": "n8n-nodes-base.snowflake",
+      "typeVersion": 1,
+      "position": [
+        736,
+        336
+      ],
+      "id": "9d6177a3-fcdf-4889-9143-071a5120d7db",
+      "name": "Snowflake",
+      "credentials": {
+        "snowflake": {
+          "id": "SWAj0JcQtldrOmlK",
+          "name": "Snowflake account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        336
+      ],
+      "id": "92669087-4425-4767-9aed-c1f20251651b",
+      "name": "Telegram Trigger",
+      "webhookId": "f46d1fd2-995c-4b75-9caf-b92bd53d6808",
+      "credentials": {
+        "telegramApi": {
+          "id": "OGDfQ5aoE15QELXP",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $item(0).$node[\"Telegram Trigger\"].json.message.chat.id }}",
+        "text": "={{\nObject.entries($json)\n  .map(([k,v]) => `${k.replaceAll('_',' ').toLowerCase()} is ${v}`)\n  .join('\\n')\n}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        240
+      ],
+      "id": "1087ef7a-325b-4b57-ae34-d035a1a8f404",
+      "name": "Send a text message",
+      "webhookId": "37e757df-1c51-46a1-b754-9985a48e07bb",
+      "credentials": {
+        "telegramApi": {
+          "id": "OGDfQ5aoE15QELXP",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// $json.output looks like ```json { \"sql\": \"...\", \"explain\": \"...\" } ```\nconst raw = ($json.output || '')\n  .replace(/```json/gi, '')\n  .replace(/```/g, '')\n  .trim();\n\nconst parsed = JSON.parse(raw);\n\nconst statements = (parsed.sql || '')\n  .split(';')\n  .map(s => s.trim())\n  .filter(Boolean)\n  .map(s => s + ';');\n\nreturn statements.map(sql => ({\n  json: { sql, explain: parsed.explain }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        336
+      ],
+      "id": "0aa1d4fc-3670-4d1b-8595-156a1857b545",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $item(0).$node[\"Telegram Trigger\"].json.message.chat.id }}",
+        "text": "={{$node[\"Code in JavaScript1\"].json[\"explain\"]}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        432
+      ],
+      "id": "2b32cff4-9204-45fb-99d9-1d985669a8b3",
+      "name": "Send a text message1",
+      "webhookId": "37e757df-1c51-46a1-b754-9985a48e07bb",
+      "credentials": {
+        "telegramApi": {
+          "id": "OGDfQ5aoE15QELXP",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5951cc99-b558-435f-8672-7427c78de376",
+              "leftValue": "={{ $json.STATUS }}",
+              "rightValue": "NEED_CLARIFICATION",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        432
+      ],
+      "id": "cd8ca1b3-9b24-4286-9f67-42c6f4bc1254",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "content": "## Telegram Trigger & AI Agent\n",
+        "height": 528,
+        "width": 576
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -128,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "6d3358b9-12a4-4c7c-807f-1891f04b1e0d",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Parses AI output containing JSON with sql and explain. Removes code fences, converts text into JSON, splits SQL on semicolons, and outputs one n8n item per SQL query for execution in Snowflake.",
+        "height": 416,
+        "width": 416
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        464,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "41e1398b-77f1-4c89-b4b1-ee65b8c7db85",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Query results are then returned to the user via Telegram.",
+        "height": 416,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        912,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "711c5d24-d5b2-490c-9a82-695d8d09062e",
+      "name": "Sticky Note2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Snowflake": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Snowflake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "38c69722-e55d-4d6f-9273-fe9e4db5418c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6291774b5602c70bc50defd7161d1bd264b767fe6a622fbefa971d9702f7c48e"
+  },
+  "id": "yu6txef0yKcBk5KAcVVWw",
+  "tags": []
+}
